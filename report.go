@@ -4,6 +4,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"log"
 	"os"
 	"os/signal"
 	"strings"
@@ -17,7 +18,10 @@ func reportCmd() command {
 	inputs := fs.String("inputs", "stdin", "Input files (comma separated)")
 	output := fs.String("output", "stdout", "Output file")
 	return command{fs, func(args []string) error {
-		fs.Parse(args)
+		err := fs.Parse(args)
+		if err != nil {
+			return err
+		}
 		return report(*reporter, *inputs, *output)
 	}}
 }
@@ -36,7 +40,12 @@ func report(reporter, inputs, output string) error {
 		if err != nil {
 			return err
 		}
-		defer in.Close()
+		defer func() {
+			errClose := in.Close()
+			if errClose != nil {
+				log.Fatal(errClose)
+			}
+		}()
 		srcs[i] = in
 	}
 	dec := vegeta.NewDecoder(srcs...)
@@ -45,7 +54,12 @@ func report(reporter, inputs, output string) error {
 	if err != nil {
 		return err
 	}
-	defer out.Close()
+	defer func() {
+		errClose := out.Close()
+		if errClose != nil {
+			log.Fatal(errClose)
+		}
+	}()
 
 	var (
 		rep    vegeta.Reporter
@@ -67,7 +81,7 @@ func report(reporter, inputs, output string) error {
 			return fmt.Errorf("bad buckets: '%s'", reporter[4:])
 		}
 		var hist vegeta.Histogram
-		if err := hist.Buckets.UnmarshalText([]byte(reporter[4:])); err != nil {
+		if err = hist.Buckets.UnmarshalText([]byte(reporter[4:])); err != nil {
 			return err
 		}
 		rep, report = vegeta.NewHistogramReporter(&hist), &hist
